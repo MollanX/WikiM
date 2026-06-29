@@ -1,0 +1,43 @@
+services:
+  # База данных для пользователей
+  pg-users:
+    image: postgres:16-alpine
+    container_name: wiki-postgres-users
+    environment:
+      POSTGRES_DB: users
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"       # внешний порт : внутренний
+    volumes:
+      - pg-users-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # База данных для статей (добавим позже)
+  # pg-articles:
+  #   ...
+
+  # Redis (добавим позже)
+  # redis:
+  #   ...
+
+  # UserService
+  svc-users:
+    build:
+      context: .
+      dockerfile: src/UserService/Dockerfile
+    container_name: wiki-user-service
+    depends_on:
+      pg-users:
+        condition: service_healthy   # ждём пока БД реально готова
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=pg-users;Port=5432;Database=users;Username=postgres;Password=postgres
+    ports:
+      - "5001:8080"
+
+volumes:
+  pg-users-data:
