@@ -1,51 +1,74 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using UserService.Data;
-using UserService.Models;
+using OpenMediator.Buses;
 using UserService.Contracts;
-using UserService.Services;
 
 namespace UserService.Controllers;
 
 [ApiController]
 [Route("api/users")]
-public class UsersController(IUserRepository users) : ControllerBase
+public class UsersController(IMediatorBus mediator) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<User>>> GetAll()
+    public async Task<ActionResult<ApiResponse<List<UserDto>>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? role = null)
     {
-        var usersList = await users.GetAllAsync();
-        return Ok(usersList);
+        var query = new GetUsersQuery(page, pageSize, role);
+        var result = await mediator.SendAsync<GetUsersQuery, ApiResponse<List<UserDto>>>(query);
+        return result.Success ? Ok(result) : BadRequest(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<User>> GetById(Guid id)
+    public async Task<ActionResult<ApiResponse<UserDto>>> GetById(Guid id)
     {
-        var user = await users.GetByIdAsync(id);
-        if (user is null) return NotFound();
-        return user;
+        var query = new GetUserByIdQuery(id);
+        var result = await mediator.SendAsync<GetUserByIdQuery, ApiResponse<UserDto>>(query);
+        return result.Success ? Ok(result) : NotFound(result);
     }
 
     [HttpPost]
-    public async Task<ActionResult<User>> Create([FromBody] CreateUserRequest request)
+    public async Task<ActionResult<ApiResponse<UserDto>>> Create([FromBody] CreateUserCommand command, [FromServices] IValidator<CreateUserCommand> validator)
     {
-        var user = new User
+        var validationResult = await validator.ValidateAsync(command);
+        if (!validationResult.IsValid)
         {
-            Id = Guid.NewGuid(),
-            Username = request.Username,
-            Email = request.Email,
-            CreatedAt = DateTime.UtcNow
-        };
+            var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
+            return BadRequest(ApiResponse<UserDto>.Fail("Ошибка валидации", errors));
+        }
 
-        await users.CreateAsync(user);
-        return CreatedAtAction(nameof(GetById), new { id = user.Id }, user);
+        var result = await mediator.SendAsync<CreateUserCommand, ApiResponse<UserDto>>(command);
+        return result.Success
+            ? CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result)
+            : Conflict(result);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<UserDto>>> Update(Guid id, [FromBody] UpdateUserCommand command, [FromServices] IValidator<UpdateUserCommand> validator)
+    {
+        var validationResult = await validator.ValidateAsync(command);
+        if (!validationResult.IsValid)
+        {
+            var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
+            return BadRequest(ApiResponse<UserDto>.Fail("Ошибка валидации", errors));
+        }
+
+        var commandWithId = command with { Id = id };
+        var result = await mediator.SendAsync<UpdateUserCommand, ApiResponse<UserDto>>(commandWithId);
+        return result.Success ? Ok(result) : NotFound(result);
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<ActionResult> Delete(Guid id)
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id)
     {
-        var deleted = await users.DeleteAsync(id);
-        if (!deleted) return NotFound();
-        return NoContent();
+        var command = new DeleteUserCommand(id);
+        var result = await mediator.SendAsync<DeleteUserCommand, ApiResponse>(command);
+        return result.Success ? Ok(result) : NotFound(result);
+    }
+
+    [HttpPatch("{id:guid}/role")]
+    public async Task<ActionResult<ApiResponse<UserDto>>> UpdateRole(Guid id, [FromBody] UpdateUserRoleCommand command)
+    {
+        var commandWithId = command with { Id = id };
+        var result = await mediator.SendAsync<UpdateUserRoleCommand, ApiResponse<UserDto>>(commandWithId);
+        return result.Success ? Ok(result) : NotFound(result);
     }
 }

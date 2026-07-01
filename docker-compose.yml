@@ -1,5 +1,5 @@
 services:
-  # База данных для пользователей
+  # === Базы данных ===
   pg-users:
     image: postgres:16-alpine
     container_name: wiki-postgres-users
@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"       # внешний порт : внутренний
+      - "5432:5432"
     volumes:
       - pg-users-data:/var/lib/postgresql/data
     healthcheck:
@@ -17,15 +17,36 @@ services:
       timeout: 5s
       retries: 5
 
-  # База данных для статей (добавим позже)
-  # pg-articles:
-  #   ...
+  pg-articles:
+    image: postgres:16-alpine
+    container_name: wiki-postgres-articles
+    environment:
+      POSTGRES_DB: articles
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"        # внешний порт 5433, чтобы не конфликтовать с users
+    volumes:
+      - pg-articles-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # Redis (добавим позже)
-  # redis:
-  #   ...
+  # === Кэш ===
+  redis:
+    image: redis:7-alpine
+    container_name: wiki-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # UserService
+  # === Сервисы ===
   svc-users:
     build:
       context: .
@@ -33,11 +54,28 @@ services:
     container_name: wiki-user-service
     depends_on:
       pg-users:
-        condition: service_healthy   # ждём пока БД реально готова
+        condition: service_healthy
     environment:
       - ConnectionStrings__DefaultConnection=Host=pg-users;Port=5432;Database=users;Username=postgres;Password=postgres
     ports:
       - "5001:8080"
 
+  svc-articles:
+    build:
+      context: .
+      dockerfile: src/ArticleService/Dockerfile
+    container_name: wiki-article-service
+    depends_on:
+      pg-articles:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=pg-articles;Port=5432;Database=articles;Username=postgres;Password=postgres
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+    ports:
+      - "5002:8080"
+
 volumes:
   pg-users-data:
+  pg-articles-data:

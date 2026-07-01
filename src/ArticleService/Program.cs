@@ -1,39 +1,63 @@
+using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
+using ArticleService.Data;
+using ArticleService.Services;
+using FluentValidation;
+using OpenMediator;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// === OpenMediator ===
+builder.Services.AddOpenMediator(cfg =>
+    cfg.RegisterCommandsFromAssembly(typeof(Program).Assembly));
 
+// === FluentValidation ===
+builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
+
+// === Контроллеры и Swagger ===
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// === PostgreSQL ===
+builder.Services.AddDbContext<ArticleDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// === Redis ===
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var config = ConfigurationOptions.Parse(
+        builder.Configuration.GetConnectionString("Redis")!);
+    config.AbortOnConnectFail = false;
+    return ConnectionMultiplexer.Connect(config);
+});
+
+// === Репозиторий ===
+builder.Services.AddScoped<IArticleRepository, ArticleRepository>();
+builder.Services.AddScoped<ITagRepository, TagRepository>();
+
+// === Health Checks ===
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ArticleDbContext>("database")
+    .AddRedis(builder.Configuration.GetConnectionString("Redis")!, "redis");
+
+// === Фоновые сервисы ===
+builder.Services.AddHostedService<ArticleCleanupService>();
+
+// === Сборка приложения ===
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// === Авто-создание БД (только для разработки) ===
+using (var scope = app.Services.CreateScope())
 {
-    app.MapOpenApi();
+    var db = scope.ServiceProvider.GetRequiredService<ArticleDbContext>();
+    await db.Database.EnsureCreatedAsync();
 }
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+// === Middleware ===
+app.UseSwagger();
+app.UseSwaggerUI();
+app.MapHealthChecks("/health");
+app.MapControllers();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
