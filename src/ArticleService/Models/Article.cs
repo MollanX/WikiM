@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ArticleService.Models;
 
 public class Article
@@ -10,6 +12,7 @@ public class Article
     public bool CommentsEnabled { get; set; } = true;
     public bool IsExplicitContent { get; set; } = false;
     public bool IsAdultContent { get; set; } = false;
+    [JsonIgnore]
     public List<ArticleTag> ArticleTags { get; set; } = new();
     public bool IsDeleted { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

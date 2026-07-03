@@ -1,5 +1,7 @@
 services:
-  # === Базы данных ===
+  # ==========================================
+  # Базы данных
+  # ==========================================
   pg-users:
     image: postgres:16-alpine
     container_name: wiki-postgres-users
@@ -8,7 +10,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5432:5432"              # Для локального подключения (pgAdmin, DBeaver)
     volumes:
       - pg-users-data:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +18,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - wiki-network
 
   pg-articles:
     image: postgres:16-alpine
@@ -25,7 +29,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5433:5432"        # внешний порт 5433, чтобы не конфликтовать с users
+      - "5433:5432"              # Для локального подключения
     volumes:
       - pg-articles-data:/var/lib/postgresql/data
     healthcheck:
@@ -33,20 +37,28 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - wiki-network
 
-  # === Кэш ===
+  # ==========================================
+  # Кэш
+  # ==========================================
   redis:
     image: redis:7-alpine
     container_name: wiki-redis
     ports:
-      - "6379:6379"
+      - "6379:6379"              # Для локального подключения (RedisInsight)
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - wiki-network
 
-  # === Сервисы ===
+  # ==========================================
+  # Микросервисы
+  # ==========================================
   svc-users:
     build:
       context: .
@@ -57,8 +69,12 @@ services:
         condition: service_healthy
     environment:
       - ConnectionStrings__DefaultConnection=Host=pg-users;Port=5432;Database=users;Username=postgres;Password=postgres
+      - ASPNETCORE_ENVIRONMENT=Development
     ports:
-      - "5001:8080"
+      - "5001:8080" 
+    networks:
+      - wiki-network
+    # Нет ports — доступен только внутри сети через Gateway
 
   svc-articles:
     build:
@@ -73,9 +89,32 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=pg-articles;Port=5432;Database=articles;Username=postgres;Password=postgres
       - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      - ASPNETCORE_ENVIRONMENT=Development
     ports:
       - "5002:8080"
+    networks:
+      - wiki-network
+
+  # ==========================================
+  # API Gateway
+  # ==========================================
+  svc-gateway:
+    build:
+      context: .
+      dockerfile: src/ApiGateway/Dockerfile
+    container_name: wiki-gateway
+    depends_on:
+      - svc-users
+      - svc-articles
+    ports:
+      - "5000:8080"              # Единственный внешний порт для всего API
+    networks:
+      - wiki-network
 
 volumes:
   pg-users-data:
   pg-articles-data:
+
+networks:
+  wiki-network:
+    driver: bridge
