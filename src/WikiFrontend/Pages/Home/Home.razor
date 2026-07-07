@@ -1,0 +1,83 @@
+﻿@namespace WikiFrontend.Pages
+@page "/"
+
+@using WikiFrontend.Models
+@using WikiFrontend.Services
+@inject WikiApiClient Api
+
+<PageTitle>Главная</PageTitle>
+
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Последние статьи -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Последние статьи</h2>
+        @if (articles == null)
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                @for (int i = 0; i < 6; i++)
+                {
+                    <div class="h-48 bg-wiki-card rounded-xl animate-pulse"></div>
+                }
+            </div>
+        }
+        else if (articles.Count == 0)
+        {
+            <div class="text-center py-12 text-wiki-muted">
+                <p class="text-lg">Статей пока нет</p>
+                <p class="text-sm mt-1">Создайте первую статью через API</p>
+            </div>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                @foreach (var article in articles.Take(6))
+                {
+                    <a href="/articles/@article.Id"
+                           class="block bg-wiki-card rounded-xl p-5 border border-wiki-border hover:border-wiki-accent transition-all hover:-translate-y-1">
+                        <h3 class="font-semibold text-lg mb-2 line-clamp-2">@article.Title</h3>
+                        <p class="text-wiki-muted text-sm line-clamp-3 mb-3">@StripMarkdown(article.Content)</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var tag in article.Tags.Take(3))
+                            {
+                                <span class="text-xs px-2 py-0.5 bg-wiki-bg rounded-full text-wiki-accent">
+                                    @tag
+                                </span>
+                            }
+                        </div>
+                    </a>
+                }
+            </div>
+        }
+    </section>
+
+    <!-- Теги -->
+    <section>
+        <h2 class="text-2xl font-bold mb-6">Теги</h2>
+        @if (tags == null)
+        {
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                @for (int i = 0; i < 12; i++)
+                {
+                    <div class="h-20 bg-wiki-card rounded-xl animate-pulse"></div>
+                }
+            </div>
+        }
+        else if (tags.Count == 0)
+        {
+            <p class="text-wiki-muted text-center py-8">Тегов пока нет</p>
+        }
+        else
+        {
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                @foreach (var tag in tags)
+                {
+                    <a href="/tags/@tag.Slug"
+                           class="bg-wiki-card rounded-xl p-4 border border-wiki-border hover:border-wiki-accent transition-all text-center">
+                        <div class="font-medium text-sm">@tag.Name</div>
+                        <div class="text-xs text-wiki-muted mt-1">@tag.Slug</div>
+                    </a>
+                }
+            </div>
+        }
+    </section>
+</div>

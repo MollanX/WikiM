@@ -3,6 +3,7 @@ using StackExchange.Redis;
 using System.Text.Json;
 using ArticleService.Data;
 using ArticleService.Models;
+using System.Text.Json.Serialization;
 
 namespace ArticleService.Services;
 
@@ -11,6 +12,12 @@ public class ArticleRepository(ArticleDbContext context, IConnectionMultiplexer 
     private readonly IDatabase _cache = redis.GetDatabase();
     private const int CacheExpiryMinutes = 10;
     private const string ListKeysSet = "cache:article-list-keys";
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
+        WriteIndented = false
+    };
 
     // === Чтение ===
 
@@ -24,7 +31,7 @@ public class ArticleRepository(ArticleDbContext context, IConnectionMultiplexer 
             if (!cached.IsNullOrEmpty)
             {
                 logger.LogDebug("Cache HIT: {Key}", cacheKey);
-                return JsonSerializer.Deserialize<Article>(cached.ToString());
+                return JsonSerializer.Deserialize<Article>(cached.ToString(), _jsonOptions);
             }
         }
 
@@ -184,7 +191,7 @@ public class ArticleRepository(ArticleDbContext context, IConnectionMultiplexer 
     public async Task CacheArticleAsync(Article article)
     {
         var key = $"article:{article.Id}";
-        await _cache.StringSetAsync(key, JsonSerializer.Serialize(article),
+        await _cache.StringSetAsync(key, JsonSerializer.Serialize(article, _jsonOptions),
             TimeSpan.FromMinutes(CacheExpiryMinutes));
         logger.LogDebug("Cache SET: {Key}", key);
     }
@@ -213,12 +220,12 @@ public class ArticleRepository(ArticleDbContext context, IConnectionMultiplexer 
         if (cached.IsNullOrEmpty) return null;
 
         logger.LogDebug("Cache HIT: {Key}", key);
-        return JsonSerializer.Deserialize<T>(cached.ToString());
+        return JsonSerializer.Deserialize<T>(cached.ToString(), _jsonOptions);
     }
 
     public async Task SetListCacheAsync<T>(string key, T data) where T : class
     {
-        await _cache.StringSetAsync(key, JsonSerializer.Serialize(data),
+        await _cache.StringSetAsync(key, JsonSerializer.Serialize(data, _jsonOptions),
             TimeSpan.FromMinutes(CacheExpiryMinutes));
         await _cache.SetAddAsync(ListKeysSet, key);
         logger.LogDebug("Cache SET: {Key} (list)", key);
