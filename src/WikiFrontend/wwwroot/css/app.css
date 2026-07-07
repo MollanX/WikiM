@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Твоя кастомная тема в CSS-переменных */
+@theme {
+    --color-wiki-bg: #1a1a1a;
+    --color-wiki-card: #2d2d2d;
+    --color-wiki-border: #3d3d3d;
+    --color-wiki-text: #e0e0e0;
+    --color-wiki-muted: #9ca3af;
+    --color-wiki-accent: #60a5fa;
+}
+
+body {
+    background-color: var(--color-wiki-bg);
+    color: var(--color-wiki-text);
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-wiki-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-wiki-border);
+    border-radius: 4px;
+}
